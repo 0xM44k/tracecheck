@@ -1,0 +1,39 @@
+# Example systemd unit for continuous telemetry-regression monitoring.
+#
+# Install:
+#   sudo cp deploy/tracecheck-monitor.service /etc/systemd/system/
+#   sudo cp tracecheck /usr/local/bin/
+#   sudo mkdir -p /var/lib/tracecheck
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now tracecheck-monitor
+#
+# This runs `tracecheck monitor` in a loop (via the unit's own restart, since
+# monitor exits after each pass unless you drop --once). Adjust --interval
+# and --only to match what you actually loaded rules for; see `tracecheck
+# rules` to generate those rules first. Logs go to the journal and to
+# /var/lib/tracecheck/alerts.jsonl.
+
+[Unit]
+Description=tracecheck telemetry-coverage monitor
+After=auditd.service network.target
+Wants=auditd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/tracecheck monitor \
+    --state /var/lib/tracecheck/state.json \
+    --alert-log /var/lib/tracecheck/alerts.jsonl \
+    --interval 5m \
+    --level safe
+Restart=on-failure
+RestartSec=10
+User=root
+# tracecheck's safe-level canaries need CAP_DAC_READ_SEARCH (read /etc/shadow)
+# and network egress for the loopback-connect check; running as root is the
+# simplest correct option. If you harden this, grant at minimum:
+#   CAP_DAC_READ_SEARCH CAP_NET_RAW CAP_AUDIT_READ
+NoNewPrivileges=false
+ProtectSystem=false
+
+[Install]
+WantedBy=multi-user.target

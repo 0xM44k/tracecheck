@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build -o tracecheck${{ matrix.os == 'windows-latest' && '.exe' || '' }} ./cmd/tracecheck
+
+      - name: go test (unit)
+        run: go test ./... -v
+
+      - name: gofmt check
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "gofmt needs to be run on:"; echo "$out"; exit 1
+          fi
+
+      # Linux: live kernel-audit verification. This exercises the real
+      # auditd integration end to end, not a mock.
+      - name: install and start auditd (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y auditd audispd-plugins
+          sudo service auditd start || sudo auditd
+          sleep 1
+          sudo auditctl -s
+
+      - name: tracecheck inspect (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo ./tracecheck inspect
+
+      - name: tracecheck verify baseline (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo ./tracecheck verify --level safe --format json --out report-before.json --timeout 10s || true
+
+      - name: tracecheck rules + load (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo ./tracecheck rules --from report-before.json > tracecheck.rules
+          cat tracecheck.rules
+          sudo auditctl -R tracecheck.rules
+
+      - name: tracecheck verify after rules (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo ./tracecheck verify --level safe --format json --out report-after.json --timeout 10s --fail-on-blind
+
+      - name: upload linux reports
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracecheck-reports-linux
+          path: report-*.json
+
+      # Windows: live verification against the real audit policy and event
+      # log, enabled first via the rules tracecheck itself generates.
+      - name: tracecheck inspect (windows, before policy)
+        if: matrix.os == 'windows-latest'
+        run: .\tracecheck.exe inspect
+
+      - name: tracecheck verify baseline (windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          .\tracecheck.exe verify --level safe --format json --out report-before.json --timeout 10s
+          exit 0
+
+      - name: tracecheck rules + apply (windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          .\tracecheck.exe rules --from report-before.json | Out-File -Encoding ascii apply.cmd
+          Get-Content apply.cmd
+          cmd /c apply.cmd
+
+      - name: tracecheck verify after policy (windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: .\tracecheck.exe verify --level safe --format json --out report-after.json --timeout 15s --fail-on-blind
+
+      - name: upload windows reports
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracecheck-reports-windows
+          path: report-*.json

@@ -1,0 +1,46 @@
+<!--
+  Example Windows Task Scheduler definition for periodic tracecheck monitor
+  runs. Import with:
+
+    schtasks /Create /TN "tracecheck monitor" /XML deploy\tracecheck-monitor-task.xml
+
+  Edit the <Command> and <Arguments> paths below to where tracecheck.exe and
+  your state/alert-log files actually live, then re-import. This runs every
+  5 minutes as SYSTEM so it can read the Security event log.
+-->
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Runs tracecheck monitor periodically to detect telemetry regressions.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <TimeTrigger>
+      <Repetition>
+        <Interval>PT5M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <StartBoundary>2026-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>C:\tracecheck\tracecheck.exe</Command>
+      <Arguments>monitor --state C:\tracecheck\state.json --alert-log C:\tracecheck\alerts.jsonl --once --level safe</Arguments>
+      <WorkingDirectory>C:\tracecheck</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
