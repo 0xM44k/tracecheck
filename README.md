@@ -131,15 +131,15 @@ This isn't "should work" — every mode has been run against a real kernel
   de-duplication), the monitor's regression/recovery comparison, and report
   rendering — `go test ./...`.
 
-## What's covered today, and what's honestly not yet
+## What's covered today, and what's not
 
-**Covered and live-verified:** Linux kernel audit (`auditd`), journald,
+**Covered and verified:** Linux kernel audit (`auditd`), journald,
 syslog files; Windows event log channels (Security, Sysmon, PowerShell,
 TaskScheduler, System) via `wevtutil`, audit policy via `auditpol`, and
 registry checks via `reg query`; the decoy/deception layer on Linux via
 `fanotify` permission events, and on Windows via SACL + polling event 4663.
 
-**Not yet implemented, listed honestly rather than silently skipped:**
+**Not yet implemented:**
 
 - **macOS.** No canaries, no sink, no telemetry model. Would need
   `eslogger`/EndpointSecurity for the kernel side and the unified log
